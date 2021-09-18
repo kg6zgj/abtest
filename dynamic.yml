@@ -1,0 +1,36 @@
+http:
+  routers:
+    my-router:
+      rule: host(`localhost`)
+      service: service-foo
+      entryPoints:
+        - web
+      middlewares:
+        - my-plugin
+
+  services:
+   service-foo:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:8080
+
+  middlewares:
+    my-plugin:
+      plugin:
+        dev:
+          addr: "127.0.0.1:6379"
+          password: ""
+          rules:
+          - service_name: test-api1
+            enable: true
+            details: 12,2
+            host: api.test.zsxq.com
+            stratege: user_id
+            piority: 1
+          - service_name: test-api2
+            enable: true
+            details: 12,21
+            host: api.test.zsxq.com
+            stratege: user_id
+            piority: 2
+

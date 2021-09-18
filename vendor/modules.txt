@@ -1,0 +1,11 @@
+# github.com/go-redis/redis v6.15.9+incompatible
+## explicit
+# github.com/gomodule/redigo v1.8.5
+## explicit
+github.com/gomodule/redigo/redis
+# github.com/kr/pretty v0.1.0
+## explicit
+# github.com/onsi/gomega v1.14.0
+## explicit
+# gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
+## explicit
