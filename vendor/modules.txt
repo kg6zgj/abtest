@@ -1,11 +1,22 @@
-# github.com/go-redis/redis v6.15.9+incompatible
-## explicit
+# github.com/davecgh/go-spew v1.1.1
+github.com/davecgh/go-spew/spew
 # github.com/gomodule/redigo v1.8.5
 ## explicit
 github.com/gomodule/redigo/redis
 # github.com/kr/pretty v0.1.0
 ## explicit
-# github.com/onsi/gomega v1.14.0
+# github.com/onsi/gomega v1.15.0
+## explicit
+# github.com/pmezard/go-difflib v1.0.0
+github.com/pmezard/go-difflib/difflib
+# github.com/stretchr/objx v0.3.0
+## explicit
+# github.com/stretchr/testify v1.7.0
+## explicit
+github.com/stretchr/testify/assert
+# golang.org/x/sys v0.0.0-20210921065528-437939a70204
 ## explicit
 # gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127
 ## explicit
+# gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c
+gopkg.in/yaml.v3

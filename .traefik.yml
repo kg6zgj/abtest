@@ -1,0 +1,27 @@
+displayName: abtest
+type: middleware
+import: github.com/unnoo/abtest
+summary: a traefik plugin for abtest
+iconPath:
+bannerPath:
+
+testData:
+  addr: "127.0.0.1:6379"
+  password: ""
+  rules:
+    - name: "rule1"
+      serviceName: "api" # 服务名字，这个会匹配外边的serviceName
+      enable: true
+      desc: "desc"
+      priority: 2
+      Hosts:
+        - http://localhost:8999/r1/beta
+        - http://localhost:8999/r1/alpha
+        - http://localhost:8999/r1/test
+      stratege: match_url
+      list:
+        - 1
+        - 3
+      percent: 10
+      minVersion: "1.1.1"
+      maxversion: "2.2.2"
