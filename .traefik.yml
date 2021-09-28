@@ -6,11 +6,22 @@ iconPath:
 bannerPath:
 
 testData:
-  addr: "127.0.0.1:6379"
-  password: ""
+  serviceName: "api"
+  redisAddr: "127.0.0.1:6379"
+  redisPassword: ""
+  redisEnable: false
+  redisLoadInterval: 10
+  userIdentifyPrefix: ""
+  headerAccessToken: "Authorization"
+  queryAccessToken: "access_token"
+  cookieAccessToken: "access_token"
+  headerVersion: "X-Version"
+  redisRulesKey: "abtests"
+  redisMaxRuleLen: 256
+  urlRuleMatchKey: "abtest_env"
   rules:
     - name: "rule1"
-      serviceName: "api" # 服务名字，这个会匹配外边的serviceName
+      serviceName: "api"
       enable: true
       desc: "desc"
       priority: 2

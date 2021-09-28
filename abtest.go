@@ -21,11 +21,11 @@ func CreateConfig() *Config {
 }
 
 type Abtest struct {
-	next         http.Handler // next
-	logger       *Logger      // logger
-	loadInterval int64        // 加载时间间隔
-	config       *Config      // 配置
-	rules        []Rule       // 灰度规则
+	next         http.Handler
+	logger       *Logger
+	loadInterval int64
+	config       *Config
+	rules        []Rule
 }
 
 func LoadConfig(abtest *Abtest) {
@@ -33,10 +33,13 @@ func LoadConfig(abtest *Abtest) {
 		return
 	}
 
+	initRedis(abtest.config.RedisAddr, abtest.config.RedisPassword)
+
 	go func() {
 		abtest.logger.Debug("load config run")
 		timeTicker := time.NewTicker(time.Duration(abtest.config.RedisLoadInterval) * time.Second)
 
+		// 用不了syscall.SIGTERM，就不处理退出事件了
 		for {
 			select {
 			case <-timeTicker.C:
@@ -52,10 +55,6 @@ func LoadConfig(abtest *Abtest) {
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	initLogger()
-
-	if config.RedisEnable {
-		initRedis(config.RedisAddr, config.RedisPassword)
-	}
 
 	// sort rules
 	sort.Sort(SortByPriority(config.Rules))
@@ -80,9 +79,8 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			if err == nil && match {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
-					a.logger.Error("match url rule error ", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					a.logger.Error("match url rule error", "target", target, "err", err)
+					continue
 				}
 				a.logger.Debug("match url rule", "target", target)
 				a.ReverseProxy(rw, req, target)
@@ -94,9 +92,8 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 			if err == nil && match {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
-					a.logger.Error("match user rule error ", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					a.logger.Error("match user rule error", "target", target, "err", err)
+					continue
 				}
 
 				a.logger.Debug("match user rule", "target", target)
@@ -110,8 +107,7 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
 					a.logger.Error("match version rule error", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					continue
 				}
 
 				a.logger.Debug("match version rule", "target", target)
@@ -125,8 +121,7 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
 					a.logger.Error("match percent rule error", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					continue
 				}
 
 				a.logger.Debug("match percent rule", "target", target)
@@ -136,14 +131,14 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	a.logger.Info("not match target")
+	a.logger.Info("not match rule")
 	a.next.ServeHTTP(rw, req)
 	return
 }
 
 // ReverseProxy 反向代理请求！
 func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target *url.URL) {
-	a.logger.Info("ReverseProxy", "from", req.URL, "to host", target)
+	a.logger.Info("ReverseProxy", "from", req.URL, "to", target)
 
 	// 替换req的host，否则会导致解析不正确
 	req.Host = target.Host
@@ -154,6 +149,9 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 // GetProxyTargetByRule 通过规则获取代理目标url
 func (a *Abtest) GetProxyTargetByRule(rule Rule) (*url.URL, error) {
 	hosts := rule.Hosts
+	if len(hosts) <= 0 {
+		return nil, errors.New("rule hosts is empty")
+	}
 	i := 0
 	count := len(hosts)
 	if count > 1 {
@@ -169,7 +167,6 @@ func (a *Abtest) GetProxyTargetByRule(rule Rule) (*url.URL, error) {
 
 // ReloadConfig 重新加载配置
 func (a *Abtest) ReloadConfig() error {
-	// 加载配置
 	rdb := GetRedisInst()
 
 	ruleKeys, err := redis.Strings(rdb.Do("LRANGE", a.config.RedisRulesKey, 0, a.config.RedisMaxRuleLen))
@@ -177,7 +174,7 @@ func (a *Abtest) ReloadConfig() error {
 		return err
 	}
 	if len(ruleKeys) <= 0 {
-		return errors.New("ruleKeys is empty")
+		return errors.New("RuleKeys is empty")
 	}
 
 	rules := make([]Rule, 0, len(ruleKeys))
@@ -189,9 +186,9 @@ func (a *Abtest) ReloadConfig() error {
 			continue
 		}
 
-		rule, err := NewRule(values)
+		rule, err := ParseRule(values)
 		if err != nil {
-			a.logger.Error("parse rule err ", err)
+			a.logger.Error("parse rule error", err)
 			continue
 		}
 
@@ -217,10 +214,9 @@ func (a *Abtest) MatchByUserRule(rule Rule, req *http.Request) (bool, error) {
 	}
 
 	for _, userId := range rule.List {
-
 		userIdentify, err := a.GenUserIdentity(userId)
 		if err != nil {
-			a.logger.Error("get user identity error", err)
+			a.logger.Error("GenUserIdentity error", err)
 			continue
 		}
 
@@ -267,22 +263,17 @@ func (a *Abtest) GetAccessToken(req *http.Request) (string, error) {
 	}
 
 	if token == "" {
-		return "", errors.New("access_token is missing")
+		return "", errors.New("AccessToken is missing")
 	}
 
 	return token, nil
-}
-
-// GetRequestHeader 获取请求头。多个只返回一个
-func (a *Abtest) GetRequestHeader(req *http.Request, key string) string {
-	return req.Header.Get(key)
 }
 
 func (a *Abtest) MatchByUrlRule(rule Rule, req *http.Request) (bool, error) {
 	if !rule.Enable || rule.Stratege != StrategeUrl || rule.ServiceName != a.config.ServiceName {
 		return false, nil
 	}
-	if strings.Index(req.URL.String(), "abtest_env") >= 0 {
+	if strings.Index(req.URL.String(), a.config.UrlRuleMatchKey) >= 0 {
 		return true, nil
 	}
 	return false, nil
@@ -294,7 +285,7 @@ func (a *Abtest) MatchByVersionRule(rule Rule, req *http.Request) (bool, error) 
 		return false, nil
 	}
 
-	requestVersion := a.GetRequestHeader(req, a.config.HeaderVersion)
+	requestVersion := req.Header.Get(a.config.HeaderVersion)
 	if a.CompareVersion(requestVersion, rule.MinVersion) >= 0 && a.CompareVersion(rule.MaxVersion, requestVersion) >= 0 {
 		return true, nil
 	}
