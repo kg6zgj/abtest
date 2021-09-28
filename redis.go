@@ -7,7 +7,7 @@ import (
 )
 
 var (
-	redisInst *redis.Conn
+	redisInst redis.Conn
 	once      sync.Once
 )
 
@@ -17,10 +17,10 @@ func initRedis(addr string, password string) {
 		if err != nil {
 			panic(err)
 		}
-		redisInst = &conn
+		redisInst = conn
 	})
 }
 
-func GetRedisInst() *redis.Conn {
+func GetRedisInst() redis.Conn {
 	return redisInst
 }
