@@ -81,8 +81,7 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
 					a.logger.Error("match url rule error ", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					continue
 				}
 				a.logger.Debug("match url rule", "target", target)
 				a.ReverseProxy(rw, req, target)
@@ -95,8 +94,7 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
 					a.logger.Error("match user rule error ", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					continue
 				}
 
 				a.logger.Debug("match user rule", "target", target)
@@ -110,8 +108,7 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
 					a.logger.Error("match version rule error", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					continue
 				}
 
 				a.logger.Debug("match version rule", "target", target)
@@ -125,8 +122,7 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				target, err := a.GetProxyTargetByRule(rule)
 				if err != nil {
 					a.logger.Error("match percent rule error", "target", target, "err", err)
-					a.next.ServeHTTP(rw, req)
-					return
+					continue
 				}
 
 				a.logger.Debug("match percent rule", "target", target)
