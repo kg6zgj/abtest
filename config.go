@@ -165,4 +165,4 @@ type SortByPriority []Rule
 
 func (a SortByPriority) Len() int           { return len(a) }
 func (a SortByPriority) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a SortByPriority) Less(i, j int) bool { return a[i].Priority < a[j].Priority }
+func (a SortByPriority) Less(i, j int) bool { return a[i].Priority > a[j].Priority }
