@@ -20,7 +20,6 @@ var (
 	RedisMaxRules     = 256
 )
 var (
-	host         = "test.api.cn"
 	alphaService = "https://alpha.api.cn"
 	betaService  = "https://beta.api.cn"
 	testService  = "https://test.api.cn"
@@ -68,14 +67,14 @@ func newConfig() *Config {
 	}
 }
 
-//func TestGetProxyTargetByRule(t *testing.T) {
-//
-//}
-//
-//func TestMatchByUserRule(t *testing.T) {
-//
-//}
-//
+func TestGetProxyTargetByRule(t *testing.T) {
+
+}
+
+func TestMatchByUserRule(t *testing.T) {
+
+}
+
 func TestGenUserIdentity(t *testing.T) {
 	config := newConfig()
 	ctx := context.Background()
@@ -156,18 +155,17 @@ func TestGetAccessToken(t *testing.T) {
 	assert.Equal(t, getToken, token)
 }
 
-//
-//func TestIsContainTargetUser(t *testing.T) {
-//
-//}
-//
-//func TestGetRequestHeader(t *testing.T) {
-//
-//}
-//
-//func TestMatchByVersionRule(t *testing.T) {
-//
-//}
+func TestIsContainTargetUser(t *testing.T) {
+
+}
+
+func TestGetRequestHeader(t *testing.T) {
+
+}
+
+func TestMatchByVersionRule(t *testing.T) {
+
+}
 
 func TestCompareVersion(t *testing.T) {
 	config := CreateConfig()
@@ -185,13 +183,13 @@ func TestCompareVersion(t *testing.T) {
 	assert.Equal(t, ab.CompareVersion("1.1.1", "1.1.1"), 0)
 }
 
-//func TestMatchByPercentRule(t *testing.T) {
-//
-//}
-//
-//func TestAccessTokenToNumber(t *testing.T) {
-//
-//}
+func TestMatchByPercentRule(t *testing.T) {
+
+}
+
+func TestAccessTokenToNumber(t *testing.T) {
+
+}
 
 func TestLoadConfig(t *testing.T) {
 	config := newConfig()

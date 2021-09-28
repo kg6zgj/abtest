@@ -19,6 +19,7 @@ type Config struct {
 	HeaderAccessToken  string `json:"headerAccessToken"`  // 请求头里的AccessToken
 	QueryAccessToken   string `json:"queryAccessToken"`   // 请求url的AccessToken
 	CookieAccessToken  string `json:"cookieAccessToken"`  // cookie里的AccessToken
+	UrlRuleMatchKey    string `json:"urlRuleMatchKey"`    // url匹配模式的关键字
 	HeaderVersion      string `json:"headerVersion"`      // 请求头里的Version
 	RedisRulesKey      string `json:"redisRulesKey"`      // redis rule key
 	RedisMaxRuleLen    int    `json:"redisMaxRuleLen"`    // redis max rule len
@@ -60,9 +61,9 @@ type Rule struct {
 	MaxVersion  string   `json:"maxVersion"`  // （可选，仅当stratege为"version"时有效）最大版本。比如："1.8.3"
 }
 
-// NewRule 解析Redis读到的rule规则
+// ParseRule 解析Redis读到的rule规则
 // format ["serviceName", "foo", "enable", 1]
-func NewRule(values []interface{}) (Rule, error) {
+func ParseRule(values []interface{}) (Rule, error) {
 	if len(values)%2 != 0 {
 		return Rule{}, errors.New("expects even number of values result")
 	}
@@ -72,7 +73,7 @@ func NewRule(values []interface{}) (Rule, error) {
 	for i := 0; i < len(values); i += 2 {
 		key, okKey := values[i].([]byte)
 		if !okKey {
-			return r, fmt.Errorf("type for String, got type %T", values[i])
+			return r, fmt.Errorf("expects type for String, got type %T", values[i])
 		}
 		value := values[i+1]
 
