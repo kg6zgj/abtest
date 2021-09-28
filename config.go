@@ -9,11 +9,13 @@ import (
 )
 
 type Config struct {
-	ServiceName   string `json:"serviceName"`   // 当前middle生效的ServiceName
-	RedisAddr     string `json:"redisAddr"`     // redis地址
-	RedisPassword string `json:"redisPassword"` // redis密码
-	RedisEnable   bool   `json:"redisEnable"`   // 是否开启redis
-	Rules         []Rule `json:"rules"`         // 灰度规则
+	ServiceName        string `json:"serviceName"`        // 当前middle生效的ServiceName
+	RedisPoolMaxIdle   int    `json:"redisPoolMaxIdle"`   // pool max idle
+	RedisPoolMaxActive int    `json:"redisPoolMaxActive"` // pool max active
+	RedisAddr          string `json:"redisAddr"`          // redis地址
+	RedisPassword      string `json:"redisPassword"`      // redis密码
+	RedisEnable        bool   `json:"redisEnable"`        // 是否开启redis
+	Rules              []Rule `json:"rules"`              // 灰度规则
 
 	UserIdentifyPrefix string `json:"userIdentifyPrefix"` // 用户身份匹配前缀
 	HeaderAccessToken  string `json:"headerAccessToken"`  // 请求头里的AccessToken
@@ -27,10 +29,10 @@ type Config struct {
 }
 
 const (
-	StrategeVersion = "version"
-	StrategeList    = "list"
-	StrategePercent = "percent"
-	StrategeUrl     = "match_url"
+	StrategyVersion = "version"
+	StrategyList    = "list"
+	StrategyPercent = "percent"
+	StrategyUrl     = "match_url"
 )
 
 const (
@@ -40,7 +42,7 @@ const (
 	KeyDesc        = "desc"
 	KeyHosts       = "host"
 	KeyPriority    = "priority"
-	KeyStratege    = "stratege"
+	KeyStrategy    = "strategy"
 	KeyList        = "list"
 	KeyPercent     = "percent"
 	KeyVersion     = "version"
@@ -54,11 +56,11 @@ type Rule struct {
 	Desc        string   `json:"desc"`        // 规则描述。输出到日志中，建议简短描述。
 	Hosts       []string `json:"hosts"`       // 转发的目标URL，多个目标以逗号分隔。如："http://1/,http://2/"。
 	Priority    int      `json:"priority"`    // 优先级
-	Stratege    string   `json:"stratege"`    // 策略。有效值："list" - 只转发指定user_id的请求，"percent" - 按用户的百分比转发，"version" - 只转发指定范围版本的请求。
-	List        []int64  `json:"list"`        // （可选，仅当stratege为"list"时有效）需要转发请求的用户ID。多个ID以逗号分隔。如："1,5,9"。
-	Percent     int      `json:"percent"`     // （可选，仅当stratege为"percent"时有效）百分比。比如："10"。
-	MinVersion  string   `json:"minVersion"`  // （可选，仅当stratege为"version"时有效）最小版本。比如："1.8.3",
-	MaxVersion  string   `json:"maxVersion"`  // （可选，仅当stratege为"version"时有效）最大版本。比如："1.8.3"
+	Strategy    string   `json:"Strategy"`    // 策略。有效值："list" - 只转发指定user_id的请求，"percent" - 按用户的百分比转发，"version" - 只转发指定范围版本的请求。
+	List        []int64  `json:"list"`        // （可选，仅当strategy为"list"时有效）需要转发请求的用户ID。多个ID以逗号分隔。如："1,5,9"。
+	Percent     int      `json:"percent"`     // （可选，仅当strategy为"percent"时有效）百分比。比如："10"。
+	MinVersion  string   `json:"minVersion"`  // （可选，仅当strategy为"version"时有效）最小版本。比如："1.8.3",
+	MaxVersion  string   `json:"maxVersion"`  // （可选，仅当strategy为"version"时有效）最大版本。比如："1.8.3"
 }
 
 // ParseRule 解析Redis读到的rule规则
@@ -119,12 +121,12 @@ func ParseRule(values []interface{}) (Rule, error) {
 				return r, err
 			}
 			r.Priority = priority
-		case KeyStratege:
-			stratege, err := redis.String(value, nil)
+		case KeyStrategy:
+			Strategy, err := redis.String(value, nil)
 			if err != nil {
 				return r, err
 			}
-			r.Stratege = stratege
+			r.Strategy = Strategy
 		case KeyList:
 			list, err := redis.String(value, nil)
 			if err != nil {

@@ -13,7 +13,13 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+)
+
+var (
+	rules       []Rule
+	rulesLoadMu = sync.Once{}
 )
 
 func CreateConfig() *Config {
@@ -25,36 +31,37 @@ type Abtest struct {
 	logger       *Logger
 	loadInterval int64
 	config       *Config
-	rules        []Rule
 }
 
 func LoadConfig(abtest *Abtest) {
 	if !abtest.config.RedisEnable {
 		return
 	}
-
 	initRedis(abtest.config.RedisAddr, abtest.config.RedisPassword)
 
 	go func() {
-		abtest.logger.Debug("load config run")
-		timeTicker := time.NewTicker(time.Duration(abtest.config.RedisLoadInterval) * time.Second)
+		rulesLoadMu.Do(func() {
+			abtest.logger.Debug("load config run")
+			timeTicker := time.NewTicker(time.Duration(abtest.config.RedisLoadInterval) * time.Second)
 
-		// 用不了syscall.SIGTERM，就不处理退出事件了
-		for {
-			select {
-			case <-timeTicker.C:
-				abtest.logger.Debug("reload config")
-				err := abtest.ReloadConfig()
-				if err != nil {
-					abtest.logger.Error("load config error", err)
+			// 用不了syscall.SIGTERM，就不处理退出事件了
+			for {
+				select {
+				case <-timeTicker.C:
+					abtest.logger.Debug("reload config")
+					err := abtest.ReloadConfig()
+					if err != nil {
+						abtest.logger.Error("load config error", err)
+					}
 				}
 			}
-		}
+		})
 	}()
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	initLogger()
+	logger.Info("new plugin name: ", name)
 
 	// sort rules
 	sort.Sort(SortByPriority(config.Rules))
@@ -64,69 +71,69 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		config:       config,
 		logger:       logger,
 		loadInterval: config.RedisLoadInterval,
-		rules:        config.Rules,
 	}
+
+	rules = config.Rules
 
 	LoadConfig(abtest)
 	return abtest, nil
 }
 
 func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if a.rules != nil && len(a.rules) > 0 {
-		for _, rule := range a.rules {
-			// match url
-			match, err := a.MatchByUrlRule(rule, req)
-			if err == nil && match {
-				target, err := a.GetProxyTargetByRule(rule)
-				if err != nil {
-					a.logger.Error("match url rule error", "target", target, "err", err)
-					continue
+	if rules != nil && len(rules) > 0 {
+		for _, rule := range rules {
+			switch rule.Strategy {
+			case StrategyUrl:
+				match, err := a.MatchByUrlRule(rule, req)
+				if err == nil && match {
+					target, err := a.GetProxyTargetByRule(rule)
+					if err != nil {
+						a.logger.Error("match url rule error", "target", target, "err", err)
+						continue
+					}
+					a.logger.Debug("match url rule", "target", target)
+					a.ReverseProxy(rw, req, target, rule.Name)
+					return
 				}
-				a.logger.Debug("match url rule", "target", target)
-				a.ReverseProxy(rw, req, target)
-				return
-			}
+			case StrategyList:
+				match, err := a.MatchByUserRule(rule, req)
+				if err == nil && match {
+					target, err := a.GetProxyTargetByRule(rule)
+					if err != nil {
+						a.logger.Error("match user rule error", "target", target, "err", err)
+						continue
+					}
 
-			// match userId
-			match, err = a.MatchByUserRule(rule, req)
-			if err == nil && match {
-				target, err := a.GetProxyTargetByRule(rule)
-				if err != nil {
-					a.logger.Error("match user rule error", "target", target, "err", err)
-					continue
+					a.logger.Debug("match user rule", "target", target)
+					a.ReverseProxy(rw, req, target, rule.Name)
+					return
 				}
+			case StrategyVersion:
+				match, err := a.MatchByVersionRule(rule, req)
+				if err == nil && match {
+					target, err := a.GetProxyTargetByRule(rule)
+					if err != nil {
+						a.logger.Error("match version rule error", "target", target, "err", err)
+						continue
+					}
 
-				a.logger.Debug("match user rule", "target", target)
-				a.ReverseProxy(rw, req, target)
-				return
-			}
-
-			// match version
-			match, err = a.MatchByVersionRule(rule, req)
-			if err == nil && match {
-				target, err := a.GetProxyTargetByRule(rule)
-				if err != nil {
-					a.logger.Error("match version rule error", "target", target, "err", err)
-					continue
+					a.logger.Debug("match version rule", "target", target)
+					a.ReverseProxy(rw, req, target, rule.Name)
+					return
 				}
+			case StrategyPercent:
+				match, err := a.MatchByPercentRule(rule, req)
+				if err == nil && match {
+					target, err := a.GetProxyTargetByRule(rule)
+					if err != nil {
+						a.logger.Error("match percent rule error", "target", target, "err", err)
+						continue
+					}
 
-				a.logger.Debug("match version rule", "target", target)
-				a.ReverseProxy(rw, req, target)
-				return
-			}
-
-			// match percent
-			match, err = a.MatchByPercentRule(rule, req)
-			if err == nil && match {
-				target, err := a.GetProxyTargetByRule(rule)
-				if err != nil {
-					a.logger.Error("match percent rule error", "target", target, "err", err)
-					continue
+					a.logger.Debug("match percent rule", "target", target)
+					a.ReverseProxy(rw, req, target, rule.Name)
+					return
 				}
-
-				a.logger.Debug("match percent rule", "target", target)
-				a.ReverseProxy(rw, req, target)
-				return
 			}
 		}
 	}
@@ -137,11 +144,12 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 }
 
 // ReverseProxy 反向代理请求！
-func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target *url.URL) {
+func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target *url.URL, ruleName string) {
 	a.logger.Info("ReverseProxy", "from", req.URL, "to", target)
 
 	// 替换req的host，否则会导致解析不正确
 	req.Host = target.Host
+	rw.Header().Set("Rule-Name", ruleName)
 	proxy := httputil.NewSingleHostReverseProxy(target)
 	proxy.ServeHTTP(rw, req)
 }
@@ -173,11 +181,12 @@ func (a *Abtest) ReloadConfig() error {
 	if err != nil {
 		return err
 	}
+
 	if len(ruleKeys) <= 0 {
 		return errors.New("RuleKeys is empty")
 	}
 
-	rules := make([]Rule, 0, len(ruleKeys))
+	newRules := make([]Rule, 0, len(ruleKeys))
 
 	for _, ruleKey := range ruleKeys {
 		values, err := redis.Values(rdb.Do("HGETALL", ruleKey))
@@ -191,20 +200,18 @@ func (a *Abtest) ReloadConfig() error {
 			a.logger.Error("parse rule error", err)
 			continue
 		}
-
 		rules = append(rules, rule)
 	}
 
 	sort.Sort(SortByPriority(rules))
 
-	a.rules = rules
-	a.config.Rules = rules
+	rules = newRules
 	return nil
 }
 
 // MatchByUserRule 匹配用户
 func (a *Abtest) MatchByUserRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Stratege != StrategeList || rule.ServiceName != a.config.ServiceName {
+	if !rule.Enable || rule.Strategy != StrategyList || rule.ServiceName != a.config.ServiceName {
 		return false, nil
 	}
 
@@ -270,7 +277,7 @@ func (a *Abtest) GetAccessToken(req *http.Request) (string, error) {
 }
 
 func (a *Abtest) MatchByUrlRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Stratege != StrategeUrl || rule.ServiceName != a.config.ServiceName {
+	if !rule.Enable || rule.Strategy != StrategyUrl || rule.ServiceName != a.config.ServiceName {
 		return false, nil
 	}
 	if strings.Index(req.URL.String(), a.config.UrlRuleMatchKey) >= 0 {
@@ -281,7 +288,7 @@ func (a *Abtest) MatchByUrlRule(rule Rule, req *http.Request) (bool, error) {
 
 // MatchByVersionRule 匹配版本规则
 func (a *Abtest) MatchByVersionRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Stratege != StrategeVersion || rule.ServiceName != a.config.ServiceName {
+	if !rule.Enable || rule.Strategy != StrategyVersion || rule.ServiceName != a.config.ServiceName {
 		return false, nil
 	}
 
@@ -317,7 +324,7 @@ func (a *Abtest) CompareVersion(version1, version2 string) int {
 
 // MatchByPercentRule 匹配灰度规则
 func (a *Abtest) MatchByPercentRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Stratege != StrategePercent || rule.ServiceName != a.config.ServiceName {
+	if !rule.Enable || rule.Strategy != StrategyPercent || rule.ServiceName != a.config.ServiceName {
 		return false, nil
 	}
 

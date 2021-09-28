@@ -46,7 +46,7 @@ func newConfig() *Config {
 				Desc:        "api1",
 				Hosts:       []string{alphaService, betaService, testService},
 				Priority:    0,
-				Stratege:    StrategeList,
+				Strategy:    StrategyList,
 				Percent:     0,
 				MinVersion:  "3.3.3",
 				MaxVersion:  "4.4.4",
@@ -58,7 +58,7 @@ func newConfig() *Config {
 				Desc:        "api1",
 				Hosts:       []string{alphaService, betaService, testService},
 				Priority:    1,
-				Stratege:    StrategeList,
+				Strategy:    StrategyList,
 				Percent:     0,
 				MinVersion:  "1.1.1",
 				MaxVersion:  "2.2.2",
@@ -204,6 +204,7 @@ func TestLoadConfig(t *testing.T) {
 	var obj interface{} = handler
 	ab := obj.(*Abtest)
 
+	initRedis("127.0.0.1:6379", "")
 	err = ab.ReloadConfig()
 	t.Log("load config result ", err)
 	v, _ := json.Marshal(ab.config.Rules)
