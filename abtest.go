@@ -74,62 +74,65 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 
 func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	if a.rules != nil && len(a.rules) > 0 {
-		matchIndex, err := a.MatchByUrlRule(req)
-		if err == nil {
-			target, err := a.GetProxyTargetByRule(matchIndex)
-			if err != nil {
-				a.logger.Error("match url rule error ", "target", target, "err", err)
-				a.next.ServeHTTP(rw, req)
-				return
-			}
-			a.logger.Debug("match url rule", "target", target)
-			a.ReverseProxy(rw, req, target)
-			return
-		}
-
-		// match by user
-		matchIndex, err = a.MatchByUserRule(req)
-		if err == nil {
-			target, err := a.GetProxyTargetByRule(matchIndex)
-			if err != nil {
-				a.logger.Error("match user rule error ", "target", target, "err", err)
-				a.next.ServeHTTP(rw, req)
+		for _, rule := range a.rules {
+			// match url
+			match, err := a.MatchByUrlRule(rule, req)
+			if err == nil && match {
+				target, err := a.GetProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match url rule error ", "target", target, "err", err)
+					a.next.ServeHTTP(rw, req)
+					return
+				}
+				a.logger.Debug("match url rule", "target", target)
+				a.ReverseProxy(rw, req, target)
 				return
 			}
 
-			a.logger.Debug("match user rule", "target", target)
-			a.ReverseProxy(rw, req, target)
-			return
-		}
+			// match userId
+			match, err = a.MatchByUserRule(rule, req)
+			if err == nil && match {
+				target, err := a.GetProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match user rule error ", "target", target, "err", err)
+					a.next.ServeHTTP(rw, req)
+					return
+				}
 
-		// match by version
-		matchIndex, err = a.MatchByVersionRule(req)
-		if err == nil {
-			target, err := a.GetProxyTargetByRule(matchIndex)
-			if err != nil {
-				a.logger.Error("match version rule error", "target", target, "err", err)
-				a.next.ServeHTTP(rw, req)
+				a.logger.Debug("match user rule", "target", target)
+				a.ReverseProxy(rw, req, target)
 				return
 			}
 
-			a.logger.Debug("match version rule", "target", target)
-			a.ReverseProxy(rw, req, target)
-			return
-		}
+			// match version
+			match, err = a.MatchByVersionRule(rule, req)
+			if err == nil && match {
+				target, err := a.GetProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match version rule error", "target", target, "err", err)
+					a.next.ServeHTTP(rw, req)
+					return
+				}
 
-		// match by percent
-		matchIndex, err = a.MatchByPercentRule(req)
-		if err == nil {
-			target, err := a.GetProxyTargetByRule(matchIndex)
-			if err != nil {
-				a.logger.Error("match percent rule error", "target", target, "err", err)
-				a.next.ServeHTTP(rw, req)
+				a.logger.Debug("match version rule", "target", target)
+				a.ReverseProxy(rw, req, target)
 				return
 			}
 
-			a.logger.Debug("match percent rule", "target", target)
-			a.ReverseProxy(rw, req, target)
-			return
+			// match percent
+			match, err = a.MatchByPercentRule(rule, req)
+			if err == nil && match {
+				target, err := a.GetProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match percent rule error", "target", target, "err", err)
+					a.next.ServeHTTP(rw, req)
+					return
+				}
+
+				a.logger.Debug("match percent rule", "target", target)
+				a.ReverseProxy(rw, req, target)
+				return
+			}
 		}
 	}
 
@@ -149,12 +152,7 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 }
 
 // GetProxyTargetByRule 通过规则获取代理目标url
-func (a *Abtest) GetProxyTargetByRule(ruleIndex int) (*url.URL, error) {
-	if ruleIndex >= len(a.rules) {
-		return nil, errors.New("index out of rules")
-	}
-
-	rule := a.rules[ruleIndex]
+func (a *Abtest) GetProxyTargetByRule(rule Rule) (*url.URL, error) {
 	hosts := rule.Hosts
 	i := 0
 	count := len(hosts)
@@ -208,31 +206,30 @@ func (a *Abtest) ReloadConfig() error {
 }
 
 // MatchByUserRule 匹配用户
-func (a *Abtest) MatchByUserRule(req *http.Request) (int, error) {
-	requestIdentify, err := a.GetUserIdentifyByRequest(req)
-	if err != nil {
-		return 0, err
+func (a *Abtest) MatchByUserRule(rule Rule, req *http.Request) (bool, error) {
+	if !rule.Enable || rule.Stratege != StrategeList || rule.ServiceName != a.config.ServiceName {
+		return false, nil
 	}
 
-	for index, rule := range a.rules {
-		if !rule.Enable || rule.Stratege != StrategeList || rule.ServiceName != a.config.ServiceName {
+	requestIdentify, err := a.GetUserIdentifyByRequest(req)
+	if err != nil {
+		return false, nil
+	}
+
+	for _, userId := range rule.List {
+
+		userIdentify, err := a.GenUserIdentity(userId)
+		if err != nil {
+			a.logger.Error("get user identity error", err)
 			continue
 		}
 
-		for _, userId := range rule.List {
-			userIdentify, err := a.GenUserIdentity(userId)
-			if err != nil {
-				a.logger.Error("get user identity is error", err)
-				continue
-			}
-
-			if userIdentify == requestIdentify {
-				return index, nil
-			}
+		if userIdentify == requestIdentify {
+			return true, nil
 		}
 	}
 
-	return 0, errors.New("not match")
+	return false, nil
 }
 
 // GenUserIdentity 通过UserId生成身份认证
@@ -281,34 +278,28 @@ func (a *Abtest) GetRequestHeader(req *http.Request, key string) string {
 	return req.Header.Get(key)
 }
 
-func (a *Abtest) MatchByUrlRule(req *http.Request) (int, error) {
-	if strings.Index(req.URL.String(), "abtest_env") < 0 {
-		return 0, errors.New("not match")
+func (a *Abtest) MatchByUrlRule(rule Rule, req *http.Request) (bool, error) {
+	if !rule.Enable || rule.Stratege != StrategeUrl || rule.ServiceName != a.config.ServiceName {
+		return false, nil
 	}
-	for index, rule := range a.rules {
-		if !rule.Enable || rule.Stratege != StrategeUrl || rule.ServiceName != a.config.ServiceName {
-			continue
-		}
-		// return first match
-		return index, nil
+	if strings.Index(req.URL.String(), "abtest_env") >= 0 {
+		return true, nil
 	}
-	return 0, errors.New("not match")
+	return false, nil
 }
 
 // MatchByVersionRule 匹配版本规则
-func (a *Abtest) MatchByVersionRule(req *http.Request) (int, error) {
-	for index, rule := range a.rules {
-		if !rule.Enable || rule.Stratege != StrategeVersion || rule.ServiceName != a.config.ServiceName {
-			continue
-		}
-
-		requestVersion := a.GetRequestHeader(req, a.config.HeaderVersion)
-
-		if a.CompareVersion(requestVersion, rule.MinVersion) >= 0 && a.CompareVersion(rule.MaxVersion, requestVersion) >= 0 {
-			return index, nil
-		}
+func (a *Abtest) MatchByVersionRule(rule Rule, req *http.Request) (bool, error) {
+	if !rule.Enable || rule.Stratege != StrategeVersion || rule.ServiceName != a.config.ServiceName {
+		return false, nil
 	}
-	return 0, errors.New("not match")
+
+	requestVersion := a.GetRequestHeader(req, a.config.HeaderVersion)
+	if a.CompareVersion(requestVersion, rule.MinVersion) >= 0 && a.CompareVersion(rule.MaxVersion, requestVersion) >= 0 {
+		return true, nil
+	}
+
+	return false, nil
 }
 
 // CompareVersion 比较版本
@@ -334,24 +325,21 @@ func (a *Abtest) CompareVersion(version1, version2 string) int {
 }
 
 // MatchByPercentRule 匹配灰度规则
-func (a *Abtest) MatchByPercentRule(req *http.Request) (int, error) {
-	for index, rule := range a.rules {
-		if !rule.Enable || rule.Stratege != StrategePercent || rule.ServiceName != a.config.ServiceName {
-			continue
-		}
-
-		userId, err := a.AccessTokenToNumber(req)
-		if err != nil {
-			a.logger.Error("AccessTokenToNumber error", err)
-			continue
-		}
-
-		if userId%100 <= rule.Percent {
-			return index, nil
-		}
+func (a *Abtest) MatchByPercentRule(rule Rule, req *http.Request) (bool, error) {
+	if !rule.Enable || rule.Stratege != StrategePercent || rule.ServiceName != a.config.ServiceName {
+		return false, nil
 	}
 
-	return 0, errors.New("not match")
+	userId, err := a.AccessTokenToNumber(req)
+	if err != nil {
+		a.logger.Error("AccessTokenToNumber error", err)
+		return false, nil
+	}
+
+	if userId%100 <= rule.Percent {
+		return true, nil
+	}
+	return false, nil
 }
 
 // AccessTokenToNumber 解析token到Number

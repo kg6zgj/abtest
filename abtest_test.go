@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/stretchr/testify/assert"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -210,4 +211,16 @@ func TestLoadConfig(t *testing.T) {
 	v, _ := json.Marshal(ab.config.Rules)
 	t.Log("load config: config is ", string(v))
 	assert.Equal(t, err, nil)
+}
+
+func TestSortByPriority(t *testing.T) {
+	rules := []Rule{
+		{Priority: 10},
+		{Priority: 111},
+		{Priority: 3},
+	}
+	sort.Sort(SortByPriority(rules))
+	for index, rule := range rules {
+		t.Log("index", index, "rule.Priority", rule.Priority)
+	}
 }
