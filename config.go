@@ -10,8 +10,6 @@ import (
 
 type Config struct {
 	ServiceName        string `json:"serviceName"`        // 当前middle生效的ServiceName
-	RedisPoolMaxIdle   int    `json:"redisPoolMaxIdle"`   // pool max idle
-	RedisPoolMaxActive int    `json:"redisPoolMaxActive"` // pool max active
 	RedisAddr          string `json:"redisAddr"`          // redis地址
 	RedisPassword      string `json:"redisPassword"`      // redis密码
 	RedisEnable        bool   `json:"redisEnable"`        // 是否开启redis
