@@ -44,7 +44,7 @@ http:
                 - http://localhost:8999/r1/beta
                 - http://localhost:8999/r1/alpha
                 - http://localhost:8999/r1/test
-              stratege: match_url
+              strategy: match_url
               list:
                 - 1
                 - 3
