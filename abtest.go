@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/gomodule/redigo/redis"
-	"math"
+	"math/rand"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -62,6 +62,7 @@ func LoadConfig(abtest *Abtest) {
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	initLogger()
 	logger.Info("new plugin name: ", name)
+	rand.Seed(time.Now().Unix())
 
 	abtest := &Abtest{
 		next:         next,
@@ -153,7 +154,7 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 			Name:  a.config.RespCookieKey,
 			Value: rule.Env,
 			Path:  "/", Domain: req.Host, // 这里要是req的host
-			Expires: time.Now().Add(time.Duration(a.config.RespCookieExpire)),
+			Expires: time.Now().Add(time.Duration(a.config.RespCookieExpire) * time.Second),
 		})
 	}
 
@@ -172,7 +173,7 @@ func (a *Abtest) GetProxyTargetByRule(rule Rule) (*url.URL, error) {
 	i := 0
 	count := len(hosts)
 	if count > 1 {
-		i = int(math.Floor(float64(time.Now().Unix() % int64(count))))
+		i = rand.Intn(count)
 	}
 	targetHost := hosts[i]
 	target, err := url.ParseRequestURI(targetHost)
