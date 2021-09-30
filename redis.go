@@ -15,6 +15,7 @@ func initRedis(addr string, password string) {
 	once.Do(func() {
 		conn, err := redis.Dial("tcp", addr, redis.DialPassword(password))
 		if err != nil {
+			logger.Error("redis init error", "addr", addr, "password", password, "error", err)
 			panic(err)
 		}
 		redisInst = conn
