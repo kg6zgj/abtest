@@ -1,0 +1,47 @@
+redisAddr: "127.0.0.1:6379"
+redisPassword: ""
+rules:
+  - serviceName: api
+    name: rule1
+    enable: true
+    desc: ""
+    host: http://abtest-svc.default.svc.cluster.local/r1/test,http://abtest-svc-alpha.default.svc.cluster.local/r1/alpha,http://abtest-svc-beta.default.svc.cluster.local/r1/beta
+    priority: 99
+    strategy: match_url
+    list: 1,2,3
+    percent: 99
+    version: 1.1.1-2.2.2
+    urlMatchKey: abtest_env
+  - serviceName: api
+    name: rule2
+    enable: true
+    desc: ""
+    host: http://abtest-svc.default.svc.cluster.local/r2/test
+    priority: 99
+    strategy: list
+    list: 1,2,3
+    percent: 99
+    version: 1.1.1-2.2.2
+    urlMatchKey: abtest_env
+  - serviceName: api
+    name: rule1
+    enable: true
+    desc: ""
+    host: http://abtest-svc.default.svc.cluster.local/r1/test,http://abtest-svc-alpha.default.svc.cluster.local/r1/alpha,http://abtest-svc-beta.default.svc.cluster.local/r1/beta
+    priority: 99
+    strategy: percent
+    list: 1,2,3
+    percent: 99
+    version: 1.1.1-2.2.2
+    urlMatchKey: abtest_env
+  - serviceName: api
+    name: rule1
+    enable: true
+    desc: ""
+    host: http://abtest-svc.default.svc.cluster.local/r1/test,http://abtest-svc-alpha.default.svc.cluster.local/r1/alpha,http://abtest-svc-beta.default.svc.cluster.local/r1/beta
+    priority: 99
+    strategy: version
+    list: 1,2,3
+    percent: 99
+    version: 1.1.1-2.2.2
+    urlMatchKey: abtest_env
