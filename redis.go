@@ -13,11 +13,20 @@ var (
 
 func initRedis(addr string, password string) {
 	once.Do(func() {
-		conn, err := redis.Dial("tcp", addr, redis.DialPassword(password))
+		conn, err := redis.Dial("tcp", addr)
 		if err != nil {
-			logger.Error("redis init error", "addr", addr, "password", password, "error", err)
+			logger.Error("redis dial error: ", err)
 			panic(err)
 		}
+
+		if password != "" {
+			_, err := redis.String(conn.Do("AUTH", password))
+			if err != nil && err.Error() != "OK" {
+				logger.Error("redis auth error: ", err)
+				panic(err)
+			}
+		}
+
 		redisInst = conn
 	})
 }
