@@ -262,7 +262,7 @@ func (a *Abtest) GetUserIdentifyByRequest(req *http.Request) (string, error) {
 		return "", errors.New("invalid token")
 	}
 
-	return token[0:16], nil
+	return token[len(token)-16:], nil
 }
 
 // GetAccessToken 获取access_token
