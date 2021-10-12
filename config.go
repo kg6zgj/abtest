@@ -47,6 +47,7 @@ const (
 	KeyPercent     = "percent"
 	KeyVersion     = "version"
 	KeyUrlMatchKey = "match_url"
+	KeyEnv         = "env"
 )
 
 // Rule 存在redis中的灰度规则
@@ -167,6 +168,12 @@ func ParseRule(values []interface{}) (Rule, error) {
 				return r, err
 			}
 			r.UrlMatchKey = matchKey
+		case KeyEnv:
+			env, err := redis.String(value, nil)
+			if err != nil {
+				return r, err
+			}
+			r.Env = env
 		}
 
 	}
