@@ -38,15 +38,15 @@ const (
 const (
 	KeyServiceName = "serviceName"
 	KeyName        = "name"
-	KeyEnable      = "enable"
+	KeyEnable      = "enabled"
 	KeyDesc        = "desc"
-	KeyHosts       = "host"
+	KeyHosts       = "hosts"
 	KeyPriority    = "priority"
-	KeyStrategy    = "strategy"
+	KeyStrategy    = "stratege"
 	KeyList        = "list"
 	KeyPercent     = "percent"
 	KeyVersion     = "version"
-	KeyUrlMatchKey = "urlMatchKey"
+	KeyUrlMatchKey = "match_url"
 )
 
 // Rule 存在redis中的灰度规则
