@@ -36,13 +36,13 @@ const (
 )
 
 const (
-	KeyServiceName = "serviceName"
+	KeyServiceName = "service_name"
 	KeyName        = "name"
 	KeyEnable      = "enabled"
 	KeyDesc        = "desc"
 	KeyHosts       = "hosts"
 	KeyPriority    = "priority"
-	KeyStrategy    = "stratege"
+	KeyStrategy    = "strategy"
 	KeyList        = "list"
 	KeyPercent     = "percent"
 	KeyVersion     = "version"
