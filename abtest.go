@@ -5,7 +5,6 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
-	"github.com/gomodule/redigo/redis"
 	"math/rand"
 	"net/http"
 	"net/http/httputil"
@@ -15,6 +14,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gomodule/redigo/redis"
 )
 
 var (
@@ -82,7 +83,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 }
 
 func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if rules != nil && len(rules) > 0 {
+	if len(rules) > 0 {
 		for _, rule := range rules {
 			switch rule.Strategy {
 			case StrategyUrl:
@@ -140,9 +141,8 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	a.logger.Info("not match rule")
+	a.logger.Info(fmt.Sprintf("not match rule, rules:%+v", rules))
 	a.next.ServeHTTP(rw, req)
-	return
 }
 
 // ReverseProxy 反向代理请求！
