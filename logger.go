@@ -8,9 +8,9 @@ import (
 type LogLevel int
 
 const (
-	LogLevelDebug = LogLevel(1)
+	LogLevelDebug = LogLevel(3)
 	LogLevelInfo  = LogLevel(2)
-	LogLevelError = LogLevel(3)
+	LogLevelError = LogLevel(1)
 )
 
 // Logger
@@ -24,19 +24,19 @@ type Logger struct {
 }
 
 func (l *Logger) Debug(args ...interface{}) {
-	if l.logLevel <= LogLevelDebug {
+	if l.logLevel >= LogLevelDebug {
 		l.loggerDebug.Println(args...)
 	}
 }
 
 func (l *Logger) Info(args ...interface{}) {
-	if l.logLevel <= LogLevelInfo {
+	if l.logLevel >= LogLevelInfo {
 		l.loggerInfo.Println(args...)
 	}
 }
 
 func (l *Logger) Error(args ...interface{}) {
-	if l.logLevel <= LogLevelError {
+	if l.logLevel >= LogLevelError {
 		l.loggerError.Println(args...)
 	}
 }
