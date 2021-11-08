@@ -19,6 +19,7 @@ testData:
   redisRulesKey: "abtests"
   redisMaxRuleLen: 256
   urlRuleMatchKey: "abtest_env"
+  logLevel: "INFO"
   rules:
     - name: "rule1"
       serviceName: "api"

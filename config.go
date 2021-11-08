@@ -26,6 +26,7 @@ type Config struct {
 	RedisRulesKey      string `json:"redisRulesKey"`      // redis rule key
 	RedisMaxRuleLen    int    `json:"redisMaxRuleLen"`    // redis max rule len
 	RedisLoadInterval  int64  `json:"redisLoadInterval"`  // redis load interval
+	LogLevel           string `json:"logLevel"`
 }
 
 const (
