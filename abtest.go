@@ -34,7 +34,7 @@ type Abtest struct {
 	config       *Config
 }
 
-func LoadConfig(abtest *Abtest) {
+func startLoadConfig(abtest *Abtest) {
 	if !abtest.config.RedisEnable {
 		return
 	}
@@ -42,7 +42,7 @@ func LoadConfig(abtest *Abtest) {
 
 	go func() {
 		rulesLoadMu.Do(func() {
-			abtest.logger.Debug("load config run")
+			abtest.logger.Info("load config ticker run")
 			timeTicker := time.NewTicker(time.Duration(abtest.config.RedisLoadInterval) * time.Second)
 
 			// 用不了syscall.SIGTERM，就不处理退出事件了
@@ -61,8 +61,12 @@ func LoadConfig(abtest *Abtest) {
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
-	initLogger()
-	logger.Info("new plugin name: ", name)
+	logger := NewLogger(config.LogLevel)
+	logger.Info("create new plugin, name: ", name)
+	configCopy := *config
+	configCopy.RedisPassword = "******"
+	logger.Debug(fmt.Sprintf("config info is %+v", configCopy))
+
 	rand.Seed(time.Now().Unix())
 
 	abtest := &Abtest{
@@ -78,7 +82,7 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 		rules = config.Rules
 	}
 
-	LoadConfig(abtest)
+	startLoadConfig(abtest)
 	return abtest, nil
 }
 
@@ -91,10 +95,10 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				if err == nil && match {
 					target, err := a.GetProxyTargetByRule(rule)
 					if err != nil {
-						a.logger.Error("match url rule error", "target", target, "err", err)
+						a.logger.Error("match url rule failed", "target", target, "err", err)
 						continue
 					}
-					a.logger.Debug("match url rule", "target", target)
+					a.logger.Info("match url rule success", "target", target)
 					a.ReverseProxy(rw, req, target, rule)
 					return
 				}
@@ -103,11 +107,11 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				if err == nil && match {
 					target, err := a.GetProxyTargetByRule(rule)
 					if err != nil {
-						a.logger.Error("match user rule error", "target", target, "err", err)
+						a.logger.Error("match user rule failed", "target", target, "err", err)
 						continue
 					}
 
-					a.logger.Debug("match user rule", "target", target)
+					a.logger.Info("match user rule success", "target", target)
 					a.ReverseProxy(rw, req, target, rule)
 					return
 				}
@@ -116,11 +120,11 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				if err == nil && match {
 					target, err := a.GetProxyTargetByRule(rule)
 					if err != nil {
-						a.logger.Error("match version rule error", "target", target, "err", err)
+						a.logger.Error("match version rule failed", "target", target, "err", err)
 						continue
 					}
 
-					a.logger.Debug("match version rule", "target", target)
+					a.logger.Debug("match version rule success", "target", target)
 					a.ReverseProxy(rw, req, target, rule)
 					return
 				}
@@ -129,11 +133,11 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 				if err == nil && match {
 					target, err := a.GetProxyTargetByRule(rule)
 					if err != nil {
-						a.logger.Error("match percent rule error", "target", target, "err", err)
+						a.logger.Error("match percent rule failed", "target", target, "err", err)
 						continue
 					}
 
-					a.logger.Debug("match percent rule", "target", target)
+					a.logger.Debug("match percent rule success", "target", target)
 					a.ReverseProxy(rw, req, target, rule)
 					return
 				}
@@ -141,13 +145,14 @@ func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 		}
 	}
 
-	a.logger.Info(fmt.Sprintf("not match rule, rules:%+v", rules))
+	a.logger.Info("not match rule")
+	a.logger.Debug(fmt.Sprintf("rules is %+v", rules))
 	a.next.ServeHTTP(rw, req)
 }
 
 // ReverseProxy 反向代理请求！
 func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target *url.URL, rule Rule) {
-	a.logger.Info("ReverseProxy", "from", req.URL, "to", target)
+	a.logger.Debug("ReverseProxy", "from", req.URL, "to", target)
 
 	if a.config.RespCookieEnable {
 		http.SetCookie(rw, &http.Cookie{
@@ -201,13 +206,13 @@ func (a *Abtest) ReloadConfig() error {
 	for _, ruleKey := range ruleKeys {
 		values, err := redis.Values(rdb.Do("HGETALL", ruleKey))
 		if err != nil {
-			a.logger.Error("get rule by ruleKey error", "key", ruleKey, "err", err)
+			a.logger.Error("get rule by ruleKey failed", "key", ruleKey, "err", err)
 			continue
 		}
 
 		rule, err := ParseRule(values)
 		if err != nil {
-			a.logger.Error("parse rule error", err)
+			a.logger.Error("parse rule failed", "error", err)
 			continue
 		}
 		newRules = append(newRules, rule)
@@ -233,7 +238,7 @@ func (a *Abtest) MatchByUserRule(rule Rule, req *http.Request) (bool, error) {
 	for _, userId := range rule.List {
 		userIdentify, err := a.GenUserIdentity(userId)
 		if err != nil {
-			a.logger.Error("GenUserIdentity error", err)
+			a.logger.Error("GenUserIdentity failed", "error", err)
 			continue
 		}
 
@@ -340,7 +345,7 @@ func (a *Abtest) MatchByPercentRule(rule Rule, req *http.Request) (bool, error) 
 
 	userId, err := a.AccessTokenToNumber(req)
 	if err != nil {
-		a.logger.Error("AccessTokenToNumber error", err)
+		a.logger.Error("AccessTokenToNumber failed", "error", err)
 		return false, nil
 	}
 

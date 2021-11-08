@@ -13,21 +13,22 @@ import (
 var configFile = flag.String("c", "", "config file")
 
 type Rule struct {
-	ServiceName string `yaml:"serviceName"`
+	ServiceName string `yaml:"service_name"`
 	Name        string `yaml:"name"`
-	Enable      bool   `yaml:"enable"`
+	Enabled     bool   `yaml:"enabled"`
 	Desc        string `yaml:"desc"`
-	Host        string `yaml:"host"`
+	Hosts       string `yaml:"hosts"`
 	Priority    int    `yaml:"priority"`
 	Strategy    string `yaml:"strategy"`
 	List        string `yaml:"list"`
 	Percent     int    `yaml:"percent"`
 	Version     string `yaml:"version"`
-	UrlMatchKey string `yaml:"urlMatchKey"`
+	UrlMatchKey string `yaml:"match_url"`
 }
 type Config struct {
 	RedisAddr     string `yaml:"redisAddr"`
 	RedisPassword string `yaml:"redisPassword"`
+	RuleListKey   string `yaml:"ruleListKey"`
 	Rules         []Rule `yaml:"rules"`
 }
 
@@ -59,19 +60,19 @@ func main() {
 	for _, rule := range cfg.Rules {
 		log.Println("insert rule ", rule.Name)
 		ruleKey := fmt.Sprintf("abtest:%s", rule.Name)
-		rdb.Do("LPUSH", "abtests",  ruleKey)
+		rdb.Do("LPUSH", cfg.RuleListKey, ruleKey)
 
-		rdb.Do("HSET", ruleKey, "serviceName", rule.ServiceName)
+		rdb.Do("HSET", ruleKey, "service_name", rule.ServiceName)
 		rdb.Do("HSET", ruleKey, "name", rule.Name)
-		rdb.Do("HSET", ruleKey, "enable", rule.Enable)
+		rdb.Do("HSET", ruleKey, "enabled", rule.Enabled)
 		rdb.Do("HSET", ruleKey, "desc", rule.Desc)
-		rdb.Do("HSET", ruleKey, "host", rule.Host)
+		rdb.Do("HSET", ruleKey, "hosts", rule.Hosts)
 		rdb.Do("HSET", ruleKey, "priority", rule.Priority)
 		rdb.Do("HSET", ruleKey, "strategy", rule.Strategy)
 		rdb.Do("HSET", ruleKey, "list", rule.List)
 		rdb.Do("HSET", ruleKey, "percent", rule.Percent)
 		rdb.Do("HSET", ruleKey, "version", rule.Version)
-		rdb.Do("HSET", ruleKey, "urlMatchKey", rule.UrlMatchKey)
+		rdb.Do("HSET", ruleKey, "match_url", rule.UrlMatchKey)
 	}
 
 }
