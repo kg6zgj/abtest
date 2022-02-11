@@ -158,7 +158,8 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 		http.SetCookie(rw, &http.Cookie{
 			Name:  a.config.RespCookieKey,
 			Value: rule.Env,
-			Path:  "/", Domain: req.Host, // 这里要是req的host
+			Path:  "/",
+			Domain: a.parseHigherHost(req.Host), // 这里要是req的host
 			Expires: time.Now().Add(time.Duration(a.config.RespCookieExpire) * time.Second),
 		})
 	}
@@ -369,4 +370,13 @@ func (a *Abtest) AccessTokenToNumber(req *http.Request) (int, error) {
 	}
 
 	return result, nil
+}
+
+// 解析上一级的host
+func (a *Abtest) parseHigherHost(host string) string {
+	arr := strings.Split(host, ".")
+	if len(arr) <= 2 {
+		return host
+	}
+	return strings.Join(arr[1:], ".")
 }
