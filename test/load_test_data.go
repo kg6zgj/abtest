@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
-	"github.com/gomodule/redigo/redis"
+	"github.com/unnoo/abtest/redis"
 	"gopkg.in/yaml.v3"
 	"log"
 	"os"

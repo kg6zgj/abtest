@@ -3,7 +3,6 @@ module github.com/unnoo/abtest
 go 1.15
 
 require (
-	github.com/gomodule/redigo v1.8.5
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/onsi/gomega v1.15.0 // indirect
 	github.com/stretchr/objx v0.3.0 // indirect

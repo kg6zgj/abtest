@@ -1,8 +1,5 @@
 # github.com/davecgh/go-spew v1.1.1
 github.com/davecgh/go-spew/spew
-# github.com/gomodule/redigo v1.8.5
-## explicit
-github.com/gomodule/redigo/redis
 # github.com/kr/pretty v0.1.0
 ## explicit
 # github.com/onsi/gomega v1.15.0
