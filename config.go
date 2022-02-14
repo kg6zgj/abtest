@@ -3,7 +3,7 @@ package abtest
 import (
 	"errors"
 	"fmt"
-	"github.com/gomodule/redigo/redis"
+	"github.com/unnoo/abtest/redis"
 	"strconv"
 	"strings"
 )

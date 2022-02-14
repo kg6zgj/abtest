@@ -1,9 +1,8 @@
 package abtest
 
 import (
+	"github.com/unnoo/abtest/redis"
 	"sync"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 var (

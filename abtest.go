@@ -5,6 +5,7 @@ import (
 	"crypto/md5"
 	"errors"
 	"fmt"
+	"github.com/unnoo/abtest/redis"
 	"math/rand"
 	"net/http"
 	"net/http/httputil"
@@ -14,8 +15,6 @@ import (
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/gomodule/redigo/redis"
 )
 
 var (
@@ -156,10 +155,10 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 
 	if a.config.RespCookieEnable {
 		http.SetCookie(rw, &http.Cookie{
-			Name:  a.config.RespCookieKey,
-			Value: rule.Env,
-			Path:  "/",
-			Domain: a.parseHigherHost(req.Host), // 这里要是req的host
+			Name:    a.config.RespCookieKey,
+			Value:   rule.Env,
+			Path:    "/",
+			Domain:  a.parseHigherHost(req.Host), // 这里要是req的host
 			Expires: time.Now().Add(time.Duration(a.config.RespCookieExpire) * time.Second),
 		})
 	}
