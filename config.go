@@ -26,14 +26,15 @@ type Config struct {
 	RedisRulesKey      string `json:"redisRulesKey"`      // redis rule key
 	RedisMaxRuleLen    int    `json:"redisMaxRuleLen"`    // redis max rule len
 	RedisLoadInterval  int64  `json:"redisLoadInterval"`  // redis load interval
-	LogLevel           string `json:"logLevel"`
+	LogLevel           string `json:"logLevel"`           // log level
 }
 
+// 策略类型
 const (
 	StrategyVersion = "version"
 	StrategyList    = "list"
 	StrategyPercent = "percent"
-	StrategyUrl     = "match_url"
+	StrategyPath    = "match_url"
 )
 
 const (
@@ -47,7 +48,7 @@ const (
 	KeyList        = "list"
 	KeyPercent     = "percent"
 	KeyVersion     = "version"
-	KeyUrlMatchKey = "match_url"
+	KeyPath        = "match_url"
 	KeyEnv         = "env"
 )
 
@@ -65,12 +66,12 @@ type Rule struct {
 	Percent     int      `json:"percent"`     // （可选，仅当strategy为"percent"时有效）百分比。比如："10"。
 	MinVersion  string   `json:"minVersion"`  // （可选，仅当strategy为"version"时有效）最小版本。比如："1.8.3",
 	MaxVersion  string   `json:"maxVersion"`  // （可选，仅当strategy为"version"时有效）最大版本。比如："1.8.3"
-	UrlMatchKey string   `json:"urlMatchKey"` // （可选，仅当strategy为"match_url"时有效) ab_test
+	Path        string   `json:"path"`        // （可选，仅当strategy为"match_url"时有效) ab_test
 }
 
-// ParseRule 解析Redis读到的rule规则
+// parseRule 解析Redis读到的rule规则
 // format ["serviceName", "foo", "enable", 1]
-func ParseRule(values []interface{}) (Rule, error) {
+func parseRule(values []interface{}) (Rule, error) {
 	if len(values)%2 != 0 {
 		return Rule{}, errors.New("expects even number of values result")
 	}
@@ -158,17 +159,17 @@ func ParseRule(values []interface{}) (Rule, error) {
 			}
 			versionArr := strings.Split(version, "-")
 			if len(versionArr) != 2 {
-				return r, errors.New(fmt.Sprintf("new roule error, version [%s] invalid", KeyVersion))
+				return r, errors.New(fmt.Sprintf("parse rule failed, version [%s] invalid", KeyVersion))
 			}
 
 			r.MinVersion = versionArr[0]
 			r.MaxVersion = versionArr[1]
-		case KeyUrlMatchKey:
-			matchKey, err := redis.String(value, nil)
+		case KeyPath:
+			path, err := redis.String(value, nil)
 			if err != nil {
 				return r, err
 			}
-			r.UrlMatchKey = matchKey
+			r.Path = path
 		case KeyEnv:
 			env, err := redis.String(value, nil)
 			if err != nil {

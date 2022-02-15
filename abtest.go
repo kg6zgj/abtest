@@ -13,13 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
-)
-
-var (
-	rules       []Rule
-	rulesLoadMu = sync.Once{}
 )
 
 func CreateConfig() *Config {
@@ -27,41 +21,16 @@ func CreateConfig() *Config {
 }
 
 type Abtest struct {
-	next         http.Handler
-	logger       *Logger
-	loadInterval int64
-	config       *Config
-}
-
-func startLoadConfig(abtest *Abtest) {
-	if !abtest.config.RedisEnable {
-		return
-	}
-	initRedis(abtest.config.RedisAddr, abtest.config.RedisPassword)
-
-	go func() {
-		rulesLoadMu.Do(func() {
-			abtest.logger.Info("load config ticker run")
-			timeTicker := time.NewTicker(time.Duration(abtest.config.RedisLoadInterval) * time.Second)
-
-			// 用不了syscall.SIGTERM，就不处理退出事件了
-			for {
-				select {
-				case <-timeTicker.C:
-					abtest.logger.Debug("reload config")
-					err := abtest.ReloadConfig()
-					if err != nil {
-						abtest.logger.Error("load config error", err)
-					}
-				}
-			}
-		})
-	}()
+	config *Config
+	next   http.Handler
+	logger *Logger
+	redis  redis.Conn
 }
 
 func New(ctx context.Context, next http.Handler, config *Config, name string) (http.Handler, error) {
 	logger := NewLogger(config.LogLevel)
-	logger.Info("create new plugin, name: ", name)
+	logger.Info("create new plugin,", "name", name)
+
 	configCopy := *config
 	configCopy.RedisPassword = "******"
 	logger.Debug(fmt.Sprintf("config info is %+v", configCopy))
@@ -69,96 +38,131 @@ func New(ctx context.Context, next http.Handler, config *Config, name string) (h
 	rand.Seed(time.Now().Unix())
 
 	abtest := &Abtest{
-		next:         next,
-		config:       config,
-		logger:       logger,
-		loadInterval: config.RedisLoadInterval,
+		next:   next,
+		config: config,
+		logger: logger,
 	}
 
-	// sort rules
 	if config.Rules != nil && len(config.Rules) > 0 {
-		sort.Sort(SortByPriority(config.Rules))
-		rules = config.Rules
+		sort.Sort(SortByPriority(abtest.config.Rules))
 	}
 
-	startLoadConfig(abtest)
+	abtest.startLoadConfig()
 	return abtest, nil
 }
 
 func (a *Abtest) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if len(rules) > 0 {
-		for _, rule := range rules {
+	a.logger.Debug(fmt.Sprintf("rules is %+v", a.config.Rules))
+
+	if a.config.Rules != nil && len(a.config.Rules) > 0 {
+		for _, rule := range a.config.Rules {
+			if !rule.Enable {
+				continue
+			}
+			if a.config.ServiceName != rule.ServiceName {
+				continue
+			}
+
 			switch rule.Strategy {
-			case StrategyUrl:
-				match, err := a.MatchByUrlRule(rule, req)
-				if err == nil && match {
-					target, err := a.GetProxyTargetByRule(rule)
-					if err != nil {
-						a.logger.Error("match url rule failed", "target", target, "err", err)
-						continue
-					}
-					a.logger.Info("match url rule success", "target", target)
-					a.ReverseProxy(rw, req, target, rule)
-					return
+			case StrategyPath:
+				ok, err := a.matchByPath(rule, req)
+				if err != nil || !ok {
+					a.logger.Error("match path failed,", "error", err, "ok", ok)
+					continue
 				}
+				target, err := a.getProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match path failed,", "error", err)
+					continue
+				}
+
+				a.logger.Info("match path success,", "target", target)
+				a.reverseProxy(rw, req, target, rule)
+				return
 			case StrategyList:
-				match, err := a.MatchByUserRule(rule, req)
-				if err == nil && match {
-					target, err := a.GetProxyTargetByRule(rule)
-					if err != nil {
-						a.logger.Error("match user rule failed", "target", target, "err", err)
-						continue
-					}
-
-					a.logger.Info("match user rule success", "target", target)
-					a.ReverseProxy(rw, req, target, rule)
-					return
+				ok, err := a.matchByIdentify(rule, req)
+				if err != nil || !ok {
+					a.logger.Error("match user_id failed,", "error", err, "ok", ok)
+					continue
 				}
+				target, err := a.getProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match user_id failed,", "target", target, "error", err)
+					continue
+				}
+
+				a.logger.Info("match user_id success,", "target", target)
+				a.reverseProxy(rw, req, target, rule)
+				return
 			case StrategyVersion:
-				match, err := a.MatchByVersionRule(rule, req)
-				if err == nil && match {
-					target, err := a.GetProxyTargetByRule(rule)
-					if err != nil {
-						a.logger.Error("match version rule failed", "target", target, "err", err)
-						continue
-					}
-
-					a.logger.Debug("match version rule success", "target", target)
-					a.ReverseProxy(rw, req, target, rule)
-					return
+				ok, err := a.matchByVersion(rule, req)
+				if err != nil || !ok {
+					a.logger.Error("match version failed,", "error", err, "ok", ok)
+					continue
 				}
+				target, err := a.getProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match version failed,", "target", target, "error", err)
+					continue
+				}
+				a.reverseProxy(rw, req, target, rule)
+				return
 			case StrategyPercent:
-				match, err := a.MatchByPercentRule(rule, req)
-				if err == nil && match {
-					target, err := a.GetProxyTargetByRule(rule)
-					if err != nil {
-						a.logger.Error("match percent rule failed", "target", target, "err", err)
-						continue
-					}
-
-					a.logger.Debug("match percent rule success", "target", target)
-					a.ReverseProxy(rw, req, target, rule)
-					return
+				ok, err := a.matchByPercent(rule, req)
+				if err != nil || !ok {
+					a.logger.Error("match percent failed,", "error", err, "ok", ok)
+					continue
 				}
+				target, err := a.getProxyTargetByRule(rule)
+				if err != nil {
+					a.logger.Error("match percent failed,", "target", target, "error", err)
+					continue
+				}
+
+				a.reverseProxy(rw, req, target, rule)
+				return
 			}
 		}
 	}
 
-	a.logger.Info("not match rule")
-	a.logger.Debug(fmt.Sprintf("rules is %+v", rules))
+	// default
+	a.logger.Info("rules is empty", "config", fmt.Sprintf("%+v", a.config))
 	a.next.ServeHTTP(rw, req)
 }
 
-// ReverseProxy 反向代理请求！
-func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target *url.URL, rule Rule) {
-	a.logger.Debug("ReverseProxy", "from", req.URL, "to", target)
+func (a *Abtest) startLoadConfig() {
+	if !a.config.RedisEnable {
+		return
+	}
+	a.redis = newRedis(a.config.RedisAddr, a.config.RedisPassword)
+
+	go func() {
+		a.logger.Info("load config ticker running...")
+		timeTicker := time.NewTicker(time.Duration(a.config.RedisLoadInterval) * time.Second)
+
+		// 用不了syscall.SIGTERM，就不处理退出事件了
+		for {
+			select {
+			case <-timeTicker.C:
+				a.logger.Debug("reload config")
+				err := a.reloadConfig()
+				if err != nil {
+					a.logger.Error("load config failed,", "error", err)
+				}
+			}
+		}
+	}()
+}
+
+func (a *Abtest) reverseProxy(rw http.ResponseWriter, req *http.Request, target *url.URL, rule Rule) {
+	a.logger.Debug("reverseProxy", "from", req.URL, "to", target)
 
 	if a.config.RespCookieEnable {
 		http.SetCookie(rw, &http.Cookie{
 			Name:    a.config.RespCookieKey,
 			Value:   rule.Env,
 			Path:    "/",
-			Domain:  a.parseHigherHost(req.Host), // 这里要是req的host
+			Domain:  a.parseHigherHost(req.Host), // 这里返回上一级的域名
 			Expires: time.Now().Add(time.Duration(a.config.RespCookieExpire) * time.Second),
 		})
 	}
@@ -169,8 +173,7 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 	proxy.ServeHTTP(rw, req)
 }
 
-// GetProxyTargetByRule 通过规则获取代理目标url
-func (a *Abtest) GetProxyTargetByRule(rule Rule) (*url.URL, error) {
+func (a *Abtest) getProxyTargetByRule(rule Rule) (*url.URL, error) {
 	hosts := rule.Hosts
 	if len(hosts) <= 0 {
 		return nil, errors.New("rule hosts is empty")
@@ -188,57 +191,49 @@ func (a *Abtest) GetProxyTargetByRule(rule Rule) (*url.URL, error) {
 	return target, nil
 }
 
-// ReloadConfig 重新加载配置
-func (a *Abtest) ReloadConfig() error {
-	rdb := GetRedisInst()
-
-	ruleKeys, err := redis.Strings(rdb.Do("LRANGE", a.config.RedisRulesKey, 0, a.config.RedisMaxRuleLen))
+func (a *Abtest) reloadConfig() error {
+	ruleKeys, err := redis.Strings(a.redis.Do("LRANGE", a.config.RedisRulesKey, 0, a.config.RedisMaxRuleLen))
 	if err != nil {
 		return err
 	}
 
 	if len(ruleKeys) <= 0 {
-		return errors.New("RuleKeys is empty")
+		return errors.New("ruleKeys is empty")
 	}
 
-	newRules := make([]Rule, 0, len(ruleKeys))
+	rules := make([]Rule, 0, len(ruleKeys))
 
 	for _, ruleKey := range ruleKeys {
-		values, err := redis.Values(rdb.Do("HGETALL", ruleKey))
+		values, err := redis.Values(a.redis.Do("HGETALL", ruleKey))
 		if err != nil {
-			a.logger.Error("get rule by ruleKey failed", "key", ruleKey, "err", err)
+			a.logger.Error("get rule failed,", "key", ruleKey, "error", err)
 			continue
 		}
 
-		rule, err := ParseRule(values)
+		rule, err := parseRule(values)
 		if err != nil {
-			a.logger.Error("parse rule failed", "error", err)
+			a.logger.Error("parse rule failed,", "error", err)
 			continue
 		}
-		newRules = append(newRules, rule)
+		rules = append(rules, rule)
 	}
 
-	sort.Sort(SortByPriority(newRules))
-	rules = newRules
+	sort.Sort(SortByPriority(rules))
+	a.config.Rules = rules
 
 	return nil
 }
 
-// MatchByUserRule 匹配用户
-func (a *Abtest) MatchByUserRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Strategy != StrategyList || rule.ServiceName != a.config.ServiceName {
-		return false, nil
-	}
-
-	requestIdentify, err := a.GetUserIdentifyByRequest(req)
+func (a *Abtest) matchByIdentify(rule Rule, req *http.Request) (bool, error) {
+	requestIdentify, err := a.getUserIdentifyByRequest(req)
 	if err != nil {
 		return false, nil
 	}
 
 	for _, userId := range rule.List {
-		userIdentify, err := a.GenUserIdentity(userId)
+		userIdentify, err := a.genUserIdentity(userId)
 		if err != nil {
-			a.logger.Error("GenUserIdentity failed", "error", err)
+			a.logger.Error("genUserIdentity failed,", "error", err)
 			continue
 		}
 
@@ -250,16 +245,14 @@ func (a *Abtest) MatchByUserRule(rule Rule, req *http.Request) (bool, error) {
 	return false, nil
 }
 
-// GenUserIdentity 通过UserId生成身份认证
-func (a *Abtest) GenUserIdentity(userId int64) (string, error) {
+func (a *Abtest) genUserIdentity(userId int64) (string, error) {
 	key := fmt.Sprintf("%s_%d", a.config.UserIdentifyPrefix, userId)
 	hash := md5.Sum([]byte(key))
 	return strings.ToUpper(fmt.Sprintf("%x", hash))[0:16], nil
 }
 
-// GetUserIdentifyByRequest 获取请求头里的身份认证
-func (a *Abtest) GetUserIdentifyByRequest(req *http.Request) (string, error) {
-	token, err := a.GetAccessToken(req)
+func (a *Abtest) getUserIdentifyByRequest(req *http.Request) (string, error) {
+	token, err := a.getAccessToken(req)
 	if err != nil {
 		return "", err
 	}
@@ -270,9 +263,8 @@ func (a *Abtest) GetUserIdentifyByRequest(req *http.Request) (string, error) {
 	return token[len(token)-16:], nil
 }
 
-// GetAccessToken 获取access_token
-func (a *Abtest) GetAccessToken(req *http.Request) (string, error) {
-	// header -> cookie -> query
+func (a *Abtest) getAccessToken(req *http.Request) (string, error) {
+	// 优先级 header -> cookie -> query
 	token := req.Header.Get(a.config.HeaderAccessToken)
 	if token == "" {
 		cookie, err := req.Cookie(a.config.CookieAccessToken)
@@ -285,38 +277,29 @@ func (a *Abtest) GetAccessToken(req *http.Request) (string, error) {
 	}
 
 	if token == "" {
-		return "", errors.New("AccessToken is missing")
+		return "", errors.New("accessToken is missing")
 	}
 
 	return token, nil
 }
 
-func (a *Abtest) MatchByUrlRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Strategy != StrategyUrl || rule.ServiceName != a.config.ServiceName {
-		return false, nil
-	}
-	if strings.Index(req.URL.String(), rule.UrlMatchKey) >= 0 {
+func (a *Abtest) matchByPath(rule Rule, req *http.Request) (bool, error) {
+	if strings.Index(req.URL.String(), rule.Path) >= 0 {
 		return true, nil
 	}
 	return false, nil
 }
 
-// MatchByVersionRule 匹配版本规则
-func (a *Abtest) MatchByVersionRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Strategy != StrategyVersion || rule.ServiceName != a.config.ServiceName {
-		return false, nil
-	}
-
+func (a *Abtest) matchByVersion(rule Rule, req *http.Request) (bool, error) {
 	requestVersion := req.Header.Get(a.config.HeaderVersion)
-	if a.CompareVersion(requestVersion, rule.MinVersion) >= 0 && a.CompareVersion(rule.MaxVersion, requestVersion) >= 0 {
+	if a.compareVersion(requestVersion, rule.MinVersion) >= 0 && a.compareVersion(rule.MaxVersion, requestVersion) >= 0 {
 		return true, nil
 	}
 
 	return false, nil
 }
 
-// CompareVersion 比较版本
-func (a *Abtest) CompareVersion(version1, version2 string) int {
+func (a *Abtest) compareVersion(version1, version2 string) int {
 	v1 := strings.Split(version1, ".")
 	v2 := strings.Split(version2, ".")
 	for i := 0; i < len(v1) || i < len(v2); i++ {
@@ -337,15 +320,10 @@ func (a *Abtest) CompareVersion(version1, version2 string) int {
 	return 0
 }
 
-// MatchByPercentRule 匹配灰度规则
-func (a *Abtest) MatchByPercentRule(rule Rule, req *http.Request) (bool, error) {
-	if !rule.Enable || rule.Strategy != StrategyPercent || rule.ServiceName != a.config.ServiceName {
-		return false, nil
-	}
-
-	userId, err := a.AccessTokenToNumber(req)
+func (a *Abtest) matchByPercent(rule Rule, req *http.Request) (bool, error) {
+	userId, err := a.accessTokenToNumber(req)
 	if err != nil {
-		a.logger.Error("AccessTokenToNumber failed", "error", err)
+		a.logger.Error("accessTokenToNumber failed,", "error", err)
 		return false, nil
 	}
 
@@ -355,9 +333,8 @@ func (a *Abtest) MatchByPercentRule(rule Rule, req *http.Request) (bool, error) 
 	return false, nil
 }
 
-// AccessTokenToNumber 解析token到Number
-func (a *Abtest) AccessTokenToNumber(req *http.Request) (int, error) {
-	token, err := a.GetAccessToken(req)
+func (a *Abtest) accessTokenToNumber(req *http.Request) (int, error) {
+	token, err := a.getAccessToken(req)
 	if err != nil {
 		return 0, err
 	}
@@ -371,7 +348,6 @@ func (a *Abtest) AccessTokenToNumber(req *http.Request) (int, error) {
 	return result, nil
 }
 
-// 解析上一级的host
 func (a *Abtest) parseHigherHost(host string) string {
 	arr := strings.Split(host, ".")
 	if len(arr) <= 2 {

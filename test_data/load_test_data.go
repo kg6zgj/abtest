@@ -23,8 +23,9 @@ type Rule struct {
 	List        string `yaml:"list"`
 	Percent     int    `yaml:"percent"`
 	Version     string `yaml:"version"`
-	UrlMatchKey string `yaml:"match_url"`
+	Path        string `yaml:"match_url"`
 }
+
 type Config struct {
 	RedisAddr     string `yaml:"redisAddr"`
 	RedisPassword string `yaml:"redisPassword"`
@@ -37,14 +38,14 @@ func main() {
 	log.Println("config file ", *configFile)
 	data, err := os.ReadFile(*configFile)
 	if err != nil {
-		log.Println("read config error", err)
+		log.Println("read config failed, error", err)
 		return
 	}
 	cfg := Config{}
 	//log.Println("config data is ", string(data))
 	err = yaml.Unmarshal(data, &cfg)
 	if err != nil {
-		log.Println("unmarshal config error ", err)
+		log.Println("unmarshal config failed, error", err)
 		return
 	}
 
@@ -53,26 +54,25 @@ func main() {
 
 	rdb, err := redis.Dial("tcp", cfg.RedisAddr, redis.DialPassword(cfg.RedisPassword))
 	if err != nil {
-		log.Println("init redis error", err)
+		log.Println("init redis failed, error", err)
 		return
 	}
 
 	for _, rule := range cfg.Rules {
 		log.Println("insert rule ", rule.Name)
 		ruleKey := fmt.Sprintf("abtest:%s", rule.Name)
-		rdb.Do("LPUSH", cfg.RuleListKey, ruleKey)
+		_, _ = rdb.Do("LPUSH", cfg.RuleListKey, ruleKey)
 
-		rdb.Do("HSET", ruleKey, "service_name", rule.ServiceName)
-		rdb.Do("HSET", ruleKey, "name", rule.Name)
-		rdb.Do("HSET", ruleKey, "enabled", rule.Enabled)
-		rdb.Do("HSET", ruleKey, "desc", rule.Desc)
-		rdb.Do("HSET", ruleKey, "hosts", rule.Hosts)
-		rdb.Do("HSET", ruleKey, "priority", rule.Priority)
-		rdb.Do("HSET", ruleKey, "strategy", rule.Strategy)
-		rdb.Do("HSET", ruleKey, "list", rule.List)
-		rdb.Do("HSET", ruleKey, "percent", rule.Percent)
-		rdb.Do("HSET", ruleKey, "version", rule.Version)
-		rdb.Do("HSET", ruleKey, "match_url", rule.UrlMatchKey)
+		_, _ = rdb.Do("HSET", ruleKey, "service_name", rule.ServiceName)
+		_, _ = rdb.Do("HSET", ruleKey, "name", rule.Name)
+		_, _ = rdb.Do("HSET", ruleKey, "enabled", rule.Enabled)
+		_, _ = rdb.Do("HSET", ruleKey, "desc", rule.Desc)
+		_, _ = rdb.Do("HSET", ruleKey, "hosts", rule.Hosts)
+		_, _ = rdb.Do("HSET", ruleKey, "priority", rule.Priority)
+		_, _ = rdb.Do("HSET", ruleKey, "strategy", rule.Strategy)
+		_, _ = rdb.Do("HSET", ruleKey, "list", rule.List)
+		_, _ = rdb.Do("HSET", ruleKey, "percent", rule.Percent)
+		_, _ = rdb.Do("HSET", ruleKey, "version", rule.Version)
+		_, _ = rdb.Do("HSET", ruleKey, "match_url", rule.Path)
 	}
-
 }
