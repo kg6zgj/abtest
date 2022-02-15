@@ -326,7 +326,6 @@ func (a *Abtest) matchByPercent(rule Rule, req *http.Request) (bool, error) {
 		a.logger.Error("accessTokenToNumber failed,", "error", err)
 		return false, nil
 	}
-
 	if userId%100 <= rule.Percent {
 		return true, nil
 	}
@@ -339,7 +338,7 @@ func (a *Abtest) accessTokenToNumber(req *http.Request) (int, error) {
 		return 0, err
 	}
 
-	tokenArr := []byte(token[1:16])
+	tokenArr := []byte(token[0:16])
 	result := 0
 	for _, value := range tokenArr {
 		result += int(value)
