@@ -288,6 +288,10 @@ func (a *Abtest) GetAccessToken(req *http.Request) (string, error) {
 		return "", errors.New("AccessToken is missing")
 	}
 
+	if len(token) < 16 {
+		return "", errors.New("invalid token")
+	}
+
 	return token, nil
 }
 
@@ -362,7 +366,7 @@ func (a *Abtest) AccessTokenToNumber(req *http.Request) (int, error) {
 		return 0, err
 	}
 
-	tokenArr := []byte(token[1:16])
+	tokenArr := []byte(token[len(token)-16:])
 	result := 0
 	for _, value := range tokenArr {
 		result += int(value)
