@@ -166,6 +166,12 @@ func (a *Abtest) ReverseProxy(rw http.ResponseWriter, req *http.Request, target 
 	// 替换req的host，否则会导致解析不正确
 	req.Host = target.Host
 	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy.ErrorHandler = func(writer http.ResponseWriter, request *http.Request, err error) {
+		// context canceled 等异常会走这里，如果不处理，traefik会认为bad Gateway而返回502
+		// 这里直接交给next去处理，能正确处理499
+		a.logger.Info(fmt.Sprintf("http: proxy error: %v", err))
+		a.next.ServeHTTP(rw, req)
+	}
 	proxy.ServeHTTP(rw, req)
 }
 
